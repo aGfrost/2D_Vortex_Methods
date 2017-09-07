@@ -20,6 +20,9 @@ def point_vortices(number, time_step):
     partb = Setup(vortices=[Vortex(*i) for i in zip(coordinates,circulations)])
     fig = plt.figure()
     ax = fig.add_axes([0,0,1,1])
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_title('Time : {}s'.format(partb.time))
     x = [i.location.real for i in partb.vortices]
     y = [i.location.imag for i in partb.vortices]
     ax.plot(x,y)
@@ -31,9 +34,13 @@ def point_vortices(number, time_step):
             partb.update_RK2(time_step)
         fig = plt.figure()
         ax = fig.add_axes([0,0,1,1])
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_title('Time : {}s'.format(partb.time))
         x = [i.location.real for i in partb.vortices]
         y = [i.location.imag for i in partb.vortices]
         ax.plot(x,y)
+
         plt.xlim((-2,2))
         plt.ylim((-2,2))
         figs1.append(fig)
@@ -54,6 +61,9 @@ def krasny_blob_linear(number, time_step, delta):
     x = [i.location.real for i in partb.vortices]
     y = [i.location.imag for i in partb.vortices]
     ax.plot(x,y)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_title('Time : {}s'.format(partb.time))
     plt.xlim((-2,2))
     plt.ylim((-2,2))
     figs2.append(fig)
@@ -65,6 +75,9 @@ def krasny_blob_linear(number, time_step, delta):
         x = [i.location.real for i in partb.vortices]
         y = [i.location.imag for i in partb.vortices]
         ax.plot(x,y)
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_title('Time : {}s'.format(partb.time))
         plt.xlim((-2,2))
         plt.ylim((-2,2))
         figs2.append(fig)
@@ -87,6 +100,9 @@ def krasny_blob_sine(number, time_step, delta):
     x = [i.location.real for i in partb.vortices]
     y = [i.location.imag for i in partb.vortices]
     ax.plot(x,y)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_title('Time : {}s'.format(partb.time))
     plt.xlim((-2,2))
     plt.ylim((-2,2))
     figs3.append(fig)
@@ -98,6 +114,9 @@ def krasny_blob_sine(number, time_step, delta):
         x = [i.location.real for i in partb.vortices]
         y = [i.location.imag for i in partb.vortices]
         ax.plot(x,y)
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_title('Time : {}s'.format(partb.time))
         plt.xlim((-2,2))
         plt.ylim((-2,2))
         figs3.append(fig)

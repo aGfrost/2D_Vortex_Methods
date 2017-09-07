@@ -14,7 +14,7 @@ class Vortex(object):
         '''
         Location should be a complex number
         '''
-        self.location = location
+        self.location = location    
         self.circulation = circulation
         self.fixed = fixed
         self.path = [location]
