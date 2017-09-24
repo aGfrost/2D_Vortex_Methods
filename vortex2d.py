@@ -2,7 +2,6 @@ import cmath
 import numpy as np
 import matplotlib.pyplot as plt
 
-#make net_circulation as an attribute
 #utility functions
 
 def dot(a,b):
@@ -10,7 +9,7 @@ def dot(a,b):
 
 class Vortex(object):
 
-    def __init__(self, location, circulation, fixed=False, reflection=False, original=False):
+    def __init__(self, location, circulation, fixed=False, reflection=False, original=False, delta = 0):
         '''
         Location should be a complex number
         '''
@@ -21,7 +20,7 @@ class Vortex(object):
         self.step = complex(0,0)
         self.reflection = reflection
         self.original = original
-
+        self.delta = delta
 
     def potential(self, location):
         '''
@@ -48,11 +47,26 @@ class Vortex(object):
         modified_grad = (complex(0,-1)*self.circulation/(2*cmath.pi))*(conj)*(1/abs(mod**2 + delta**2))
         return complex(modified_grad.real,(-1*(modified_grad.imag)))
 
+    def get_chorin_velocity(self, location):
+        relative_vector = location - self.location
+        mod = abs(relative_vector)
+        conj = relative_vector.conjugate()
+
+        if mod!=0 and mod<=self.delta:
+            modified_grad = (complex(0,-1)*self.circulation/(2*cmath.pi))*(conj)*(1/abs(mod*self.delta))
+            return complex(modified_grad.real,(-1*(modified_grad.imag)))
+        elif mod==0:
+            return complex(0,0)
+        else:
+            return complex(self.potential_grad(location).real,(-1*(self.potential_grad(location).imag)))
+
+
 class Cont_panel(object):
 
-    def __init__(self, points, velocity=0):
+    def __init__(self, points, velocity=0, net_circulation=0):
         self.panel_points = [Panel_point(points[i],0,i) for i in range(len(points))]
         self.velocity = velocity
+        self.net_circulation = net_circulation
 
     def get_velocity(self, location):
         res = 0
@@ -69,7 +83,7 @@ class Cont_panel(object):
             res += uiv
         return res
 
-    def solve(self, net_circulation, system):
+    def solve(self, system):
         for i in self.panel_points:
             i.gamma = 0
         A = []
@@ -108,7 +122,7 @@ class Cont_panel(object):
                 a.append(coeff)
             A.append(a)
         A.append(lambdas)
-        b.append(net_circulation)
+        b.append(self.net_circulation)
         self.A = A
         self.b = b
         sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
@@ -129,12 +143,16 @@ class Linear_panel(object):
 
     '''
 
-    def __init__(self, points, velocity=0):
+    def __init__(self, points, velocity=0, loop=False, net_circulation=0):
         '''
         n is the number of panels
         r is the radius of the circle
         '''
+        self.net_circulation = net_circulation
+        self.loop = loop
         self.panel_points = [Panel_point(points[i],0,i) for i in range(len(points))]
+        if self.loop:
+            self.panel_points[-1] = self.panel_points[0]
         self.velocity = velocity
         self.n = len(self.panel_points)
     def get_velocity(self, location):
@@ -156,7 +174,7 @@ class Linear_panel(object):
             res_final += res
         return res_final
 
-    def solve(self, net_circulation, system):
+    def solve(self, system):
         for i in self.panel_points:
             i.gamma = 0
         A = map(list,np.zeros((self.n - 1, self.n)))
@@ -198,13 +216,87 @@ class Linear_panel(object):
                 A[k][m] += dot(n,res1)
                 A[k][m+1] += dot(n,res2)
         A.append(lambdas)
-        b.append(net_circulation)
+        b.append(self.net_circulation)
         self.A = np.array(A)
         self.b = np.array(b)
-        sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
-        for i in range(len(self.panel_points)):
-            self.panel_points[i].gamma = sol[i]
+        if self.loop:
+            #modify A
+            lst = list(map(list,self.A))
+            for row in lst:
+                row[0] = row[0] + row[-1]
+            self.A = np.array(lst)[:,:-1]
+            sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
+            for i in range(len(self.panel_points) - 1):
+                if abs(sol[i]) >= 0:
+                    self.panel_points[i].gamma = sol[i]
+                else:
+                    self.panel_points[i].gamma = 0
+            self.panel_points[-1].gamma = self.panel_points[0].gamma
 
+        else:
+            sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
+            for i in range(len(self.panel_points)):
+                self.panel_points[i].gamma = sol[i]
+    def solve_chorin(self, system):
+        for i in self.panel_points:
+            i.gamma = 0
+        A = map(list,np.zeros((self.n - 1, self.n)))
+        b = []
+        lambdas = list(np.zeros(self.n))
+
+        for k in range(self.n - 1):
+            p1 = self.panel_points[k]
+            p2 = self.panel_points[k+1]
+            midpoint = (p1.location + p2.location)/2
+            relative_vector = p2.location - p1.location
+            lambdas[k] += abs(relative_vector)/2
+            lambdas[k+1] += abs(relative_vector)/2
+            t = (relative_vector)/abs(relative_vector)
+            n = 1j*t
+            v = 0
+            #ought to generalize this
+            if system.freestreams is not None:
+
+                for freestream in system.freestreams:
+                    v += freestream.get_velocity(midpoint)
+            if system.vortices is not None:
+                for vortex in system.vortices:
+                    v += vortex.get_chorin_velocity(midpoint)
+            b.append(dot(n, self.velocity -v))
+            for m in range(self.n - 1):
+                z1 = self.panel_points[m]
+                z2 = self.panel_points[m+1]
+                rel = z2.location - z1.location
+                lamda = abs(rel)
+                tz = rel/lamda
+                tc = tz.conjugate()
+                z = (midpoint - z1.location)*tc
+                res1 = (-1j/(2*cmath.pi))*((((z/lamda)-1)*cmath.log(1-(lamda/z)))+1)
+
+                res2 = (1j/(2*cmath.pi))*((((z/lamda))*cmath.log(1-(lamda/z)))+1)
+                res1 = res1.conjugate()*tz
+                res2 = res2.conjugate()*tz
+                A[k][m] += dot(n,res1)
+                A[k][m+1] += dot(n,res2)
+        A.append(lambdas)
+        b.append(self.net_circulation)
+        self.A = np.array(A)
+        self.b = np.array(b)
+        if self.loop:
+            #modify A
+            lst = list(map(list,self.A))
+            for row in lst:
+                row[0] = row[0] + row[-1]
+            self.A = np.array(lst)[:,:-1]
+            sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
+            for i in range(len(self.panel_points) - 1):
+                self.panel_points[i].gamma = sol[i]
+            self.panel_points[-1].gamma = self.panel_points[0].gamma
+
+        else:
+            sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
+            for i in range(len(self.panel_points)):
+                self.panel_points[i].gamma = sol[i]
 
 class Source(object):
 
@@ -294,6 +386,7 @@ class Tracer(object):
 
 class Setup(object):
 
+
     def __init__(self, assignment_panel=False,sources=None, vortices=None, freestreams=None, tracers=None, cont_panels=None, doublets=None, linear_panels=None):
         '''
         each kwarg should be a list of respective object,
@@ -360,6 +453,29 @@ class Setup(object):
             return velocity
 
         return get_vel(x,y)
+    def get_total_velocity_chorin(self, x,y):
+
+       @np.vectorize
+       def get_vel(x,y):
+           location = complex(x,y)
+           velocity = 0
+           for element in self.all:
+               if self.vortices is not None:
+                   if element in self.vortices:
+                       velocity += element.get_chorin_velocity(location)
+                       continue
+               velocity += element.get_velocity(location)
+
+
+           if self.cont_panels is not None:
+               for i in self.cont_panels:
+                   velocity += i.get_velocity(location)
+           if self.linear_panels is not None:
+               for i in self.linear_panels:
+                   velocity += i.get_velocity(location)
+           return velocity
+
+       return get_vel(x,y)
 
     def get_element_velocity(self, element):
         '''
@@ -381,6 +497,8 @@ class Setup(object):
     def get_element_velocity_krasny(self, element, delta):
         '''
         returns complex velocity of an element due to all the other elements
+        except the one entered as an argument, note that for this to work, the
+        element has to have a get_krasny_velocity method
         '''
         temp_set = set(self.all)
         temp_set.remove(element)
@@ -392,6 +510,38 @@ class Setup(object):
                 velocity += i.get_velocity(element.location)
 
         return velocity
+
+
+    def get_element_velocity_chorin(self, element):
+        '''
+        returns complex velocity of an element due to all the other elements
+        except the one entered as an argument, note that for this to work, the
+        element has to have a get_krasny_velocity method
+        '''
+        temp_set = set(self.all)
+        temp_set.remove(element)
+        velocity = complex()
+        for i in temp_set:
+            if self.vortices is not None:
+                if i in self.vortices:
+                    velocity = velocity + i.get_chorin_velocity(element.location)
+                    continue
+            velocity = velocity + i.get_velocity(element.location)
+        if self.cont_panels is not None:
+            for i in self.cont_panels:
+                velocity += i.get_velocity(element.location)
+
+        return velocity
+
+    def add_vortices(self,vortices):
+
+        if self.all is not None:
+            if self.vortices is not None:
+                self.all.extend(vortices)
+                self.vortices.extend(vortices)
+            else:
+                self.vortices = vortices
+                self.all.extend(vortices)
 
     def update_euler(self, time_step):
 
@@ -474,10 +624,10 @@ class Setup(object):
 
         if self.cont_panels is not None:
             for con in self.cont_panels:
-                con.solve(0, self)
+                con.solve(self)
         if self.linear_panels is not None:
             for lin in self.linear_panels:
-                lin.solve(0 ,self)
+                lin.solve(self)
 
         #get steps for each element
         time_step = time_step*2
@@ -515,7 +665,7 @@ class Setup(object):
                 tracer.location = tracer.location + tracer.step
                 tracer.path.append(complex(tracer.location))
 
-    def update_RK2_krasny(self, time_step,delta):
+    def update_RK2_krasny(self, time_step, delta):
         self.time = self.time + time_step
         time_step = float(time_step)
 
@@ -555,6 +705,12 @@ class Setup(object):
                 tracer.location = tracer.location + tracer.step
                 tracer.path.append(complex(tracer.location))
 
+        if self.cont_panels is not None:
+            for con in self.cont_panels:
+                con.solve(self)
+        if self.linear_panels is not None:
+            for lin in self.linear_panels:
+                lin.solve(self)
         #get steps for each element
         time_step = time_step*2
 
@@ -590,3 +746,115 @@ class Setup(object):
             for tracer in self.tracers:
                 tracer.location = tracer.location + tracer.step
                 tracer.path.append(complex(tracer.location))
+
+    def update_RK2_chorin(self, time_step):
+        self.time = self.time + time_step
+        time_step = float(time_step)
+
+        #get steps for each element
+        time_step = time_step/2
+
+        if self.vortices is not None:
+            for vortex in self.vortices:
+                if vortex.fixed is not True:
+                    vortex.step = self.get_element_velocity_chorin(vortex)*time_step
+
+        if self.tracers is not None:
+            for tracer in self.tracers:
+                tracer.step = self.get_velocity(tracer.location.real, tracer.location.imag)*time_step
+
+        if self.sources is not None:
+            for source in self.sources:
+                if source.fixed is not True:
+                    source.step = self.get_element_velocity(source)*time_step
+
+        #update the positions of each element
+
+        if self.vortices is not None:
+            for vortex in self.vortices:
+                if vortex.fixed is not True:
+                    vortex.location = vortex.location + vortex.step
+                    vortex.path.append(complex(vortex.location))
+
+        if self.sources is not None:
+            for source in self.sources:
+                if source.fixed is not True:
+                    source.location = source.location + source.step
+                    source.path.append(complex(source.location))
+
+        if self.tracers is not None:
+            for tracer in self.tracers:
+                tracer.location = tracer.location + tracer.step
+                tracer.path.append(complex(tracer.location))
+
+        if self.cont_panels is not None:
+            for con in self.cont_panels:
+                con.solve(self)
+        if self.linear_panels is not None:
+            for lin in self.linear_panels:
+                lin.solve_chorin(self)
+        #get steps for each element
+        time_step = time_step*2
+
+        if self.vortices is not None:
+            for vortex in self.vortices:
+                if vortex.fixed is not True:
+                    vortex.step = self.get_element_velocity_chorin(vortex)*time_step - vortex.step
+
+        if self.tracers is not None:
+            for tracer in self.tracers:
+                tracer.step = self.get_velocity(tracer.location.real, tracer.location.imag)*time_step - tracer.step
+
+        if self.sources is not None:
+            for source in self.sources:
+                if source.fixed is not True:
+                    source.step = self.get_element_velocity(source)*time_step - source.step
+
+        #update the positions of each element
+
+        if self.vortices is not None:
+            for vortex in self.vortices:
+                if vortex.fixed is not True:
+                    vortex.location = vortex.location + vortex.step
+                    vortex.path.append(complex(vortex.location))
+
+        if self.sources is not None:
+            for source in self.sources:
+                if source.fixed is not True:
+                    source.location = source.location + source.step
+                    source.path.append(complex(source.location))
+
+        if self.tracers is not None:
+            for tracer in self.tracers:
+                tracer.location = tracer.location + tracer.step
+                tracer.path.append(complex(tracer.location))
+
+    def diffuse(self, nu, dt):
+        if self.all is not None:
+            for element in self.all:
+                if self.vortices is not None:
+                    if element in self.vortices:
+                        xnew = element.location.real + np.random.normal(0,(2*nu*dt)**0.5)
+                        ynew = element.location.imag + np.random.normal(0,(2*nu*dt)**0.5)
+                        element.location = complex(xnew, ynew)
+                        element.path.append(element.location)
+
+    def reflect(self, reference, rcritical):
+        if self.vortices is not None:
+            for vortex in self.vortices:
+                relative_vector = vortex.location - reference
+                r = abs(relative_vector)
+                if r <= rcritical and r!=0:
+                    vortex.location = reference + (2*rcritical - r)*(relative_vector/r)
+
+    def annihilate(self):
+        if self.vortices is not None:
+            for i in range(len(self.vortices)):
+                for j in (np.arange(len(self.vortices) - 1) + i)%len(self.vortices):
+                    if abs(self.vortices[i].location - self.vortices[j].location) <= 2*self.vortices[i].delta:
+                        self.vortices[i].gamma = 0
+                        self.vortices[j].gamma = 0
+            for vortex in self.vortices:
+                if vortex.gamma == 0:
+                    self.all.remove(vortex)
+                    self.vortices.remove(vortex)
