@@ -27,14 +27,14 @@ class Vortex(object):
         Returns a complex potential at a given location
         '''
 
-        return (complex(0,-1)*(cmath.log(location - self.location))*(self.circulation)/(2*cmath.pi))
+        return (complex(0,-1)*(cmath.log(location - self.location))*(self.circulation)/(2*np.pi))
 
     def potential_grad(self, location):
         '''
         Returns a complex gradient of the potential function at a given location
         '''
 
-        return (complex(0,-1)*self.circulation/(2*cmath.pi))*(1/(location - self.location))
+        return (complex(0,-1)*self.circulation/(2*np.pi))*(1/(location - self.location))
 
     def get_velocity(self, location):
 
@@ -44,7 +44,7 @@ class Vortex(object):
         relative_vector = location - self.location
         mod = abs(relative_vector)
         conj = relative_vector.conjugate()
-        modified_grad = (complex(0,-1)*self.circulation/(2*cmath.pi))*(conj)*(1/abs(mod**2 + delta**2))
+        modified_grad = (complex(0,-1)*self.circulation/(2*np.pi))*(conj)*(1/abs(mod**2 + delta**2))
         return complex(modified_grad.real,(-1*(modified_grad.imag)))
 
     def get_chorin_velocity(self, location):
@@ -53,7 +53,7 @@ class Vortex(object):
         conj = relative_vector.conjugate()
 
         if mod!=0 and mod<=self.delta:
-            modified_grad = (complex(0,-1)*self.circulation/(2*cmath.pi))*(conj)*(1/abs(mod*self.delta))
+            modified_grad = (complex(0,-1)*self.circulation/(2*np.pi))*(conj)*(1/abs(mod*self.delta))
             return complex(modified_grad.real,(-1*(modified_grad.imag)))
         elif mod==0:
             return complex(0,0)
@@ -77,7 +77,7 @@ class Cont_panel(object):
             t = (relative_vector)/abs(relative_vector)
             tc = t.conjugate()
             z = (location - p1.location)*tc
-            uiv = (1j*p1.gamma*cmath.log(1-(abs(relative_vector)/z)))/(2*cmath.pi)
+            uiv = (1j*p1.gamma*cmath.log(1-(abs(relative_vector)/z)))/(2*np.pi)
             uiv = uiv.conjugate()
             uiv = uiv*t
             res += uiv
@@ -115,7 +115,7 @@ class Cont_panel(object):
                 tz = (relative_vector_z)/abs(relative_vector_z)
                 tzc = tz.conjugate()
                 z = (midpoint - z1.location)*tzc
-                coeff = (1j*cmath.log(1-(abs(relative_vector_z)/z)))/(2*cmath.pi)
+                coeff = (1j*cmath.log(1-(abs(relative_vector_z)/z)))/(2*np.pi)
                 coeff = coeff.conjugate()
                 coeff = coeff*tz
                 coeff = dot(n, coeff)
@@ -131,34 +131,34 @@ class Cont_panel(object):
 
 class Panel_point(object):
 
-    def __init__(self, location, gamma, number):
+    def __init__(self, location, gamma):
 
         self.location = location
         self.gamma = gamma
-        self.number = number
 
 class Linear_panel(object):
     '''
-    A collection of points forming a circle with a gamma value for each.
+    A closed loop collection of panels
 
     '''
 
-    def __init__(self, points, velocity=0, loop=False, net_circulation=0):
+    def __init__(self, points, velocity=0, net_circulation=0):
         '''
-        n is the number of panels
-        r is the radius of the circle
+        Choose n+1 points in circular fashion for n panels
         '''
+
         self.net_circulation = net_circulation
-        self.loop = loop
-        self.panel_points = [Panel_point(points[i],0,i) for i in range(len(points))]
-        if self.loop:
-            self.panel_points[-1] = self.panel_points[0]
+        self.panel_points = [Panel_point(points[i],0) for i in range(len(points))]
+        #for loop
+        self.panel_points[-1] = self.panel_points[0]
         self.velocity = velocity
-        self.n = len(self.panel_points)
+        #no of panels
+        self.n = len(self.panel_points) - 1
+
     def get_velocity(self, location):
 
         res_final = 0
-        for i in range(self.n - 1):
+        for i in range(self.n):
             p1 = self.panel_points[i]
             p2 = self.panel_points[i+1]
             rel = p2.location - p1.location
@@ -166,8 +166,8 @@ class Linear_panel(object):
             t = rel/lamda
             tc = t.conjugate()
             z = (location - p1.location)*tc
-            res =  (-1j*p1.gamma/(2*cmath.pi))*((((z/lamda)-1)*cmath.log(1-(lamda/z)))+1) +\
-             (1j*p2.gamma/(2*cmath.pi))*((((z/lamda))*cmath.log(1-(lamda/z)))+1)
+            res =  (-1j*p1.gamma/(2*np.pi))*((((z/lamda)-1)*cmath.log(1-(lamda/z)))+1) +\
+             (1j*p2.gamma/(2*np.pi))*((((z/lamda))*cmath.log(1-(lamda/z)))+1)
             res = res.conjugate()
             res = res*t
             #rotate
@@ -177,11 +177,11 @@ class Linear_panel(object):
     def solve(self, system):
         for i in self.panel_points:
             i.gamma = 0
-        A = map(list,np.zeros((self.n - 1, self.n)))
+        A = np.zeros((self.n, self.n + 1))
         b = []
-        lambdas = list(np.zeros(self.n))
+        lambdas = np.zeros(self.n + 1)
 
-        for k in range(self.n - 1):
+        for k in range(self.n):
             p1 = self.panel_points[k]
             p2 = self.panel_points[k+1]
             midpoint = (p1.location + p2.location)/2
@@ -200,7 +200,7 @@ class Linear_panel(object):
                 for vortex in system.vortices:
                     v += vortex.get_velocity(midpoint)
             b.append(dot(n, self.velocity -v))
-            for m in range(self.n - 1):
+            for m in range(self.n):
                 z1 = self.panel_points[m]
                 z2 = self.panel_points[m+1]
                 rel = z2.location - z1.location
@@ -208,43 +208,38 @@ class Linear_panel(object):
                 tz = rel/lamda
                 tc = tz.conjugate()
                 z = (midpoint - z1.location)*tc
-                res1 = (-1j/(2*cmath.pi))*((((z/lamda)-1)*cmath.log(1-(lamda/z)))+1)
+                res1 = (-1j/(2*np.pi))*((((z/lamda)-1)*cmath.log(1-(lamda/z)))+1)
 
-                res2 = (1j/(2*cmath.pi))*((((z/lamda))*cmath.log(1-(lamda/z)))+1)
+                res2 = (1j/(2*np.pi))*((((z/lamda))*cmath.log(1-(lamda/z)))+1)
                 res1 = res1.conjugate()*tz
                 res2 = res2.conjugate()*tz
                 A[k][m] += dot(n,res1)
                 A[k][m+1] += dot(n,res2)
-        A.append(lambdas)
+        A = np.insert(A, self.n, lambdas, axis=0)
         b.append(self.net_circulation)
-        self.A = np.array(A)
-        self.b = np.array(b)
-        if self.loop:
-            #modify A
-            lst = list(map(list,self.A))
-            for row in lst:
-                row[0] = row[0] + row[-1]
-            self.A = np.array(lst)[:,:-1]
-            sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
-            for i in range(len(self.panel_points) - 1):
-                if abs(sol[i]) >= 0:
-                    self.panel_points[i].gamma = sol[i]
-                else:
-                    self.panel_points[i].gamma = 0
-            self.panel_points[-1].gamma = self.panel_points[0].gamma
+        #modify A to make first gamma and the last gamma equal
+        A[:,0] += A[:,-1]
+        A = A[:,:-1]
 
-        else:
-            sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
-            for i in range(len(self.panel_points)):
+
+
+        sol = np.linalg.lstsq(A, np.array(b))[0]
+        for i in range(self.n):
+            if abs(sol[i]) >= 0:
                 self.panel_points[i].gamma = sol[i]
+            else:
+                self.panel_points[i].gamma = 0
+
+
+
     def solve_chorin(self, system):
         for i in self.panel_points:
             i.gamma = 0
-        A = map(list,np.zeros((self.n - 1, self.n)))
+        A = np.zeros((self.n, self.n + 1))
         b = []
-        lambdas = list(np.zeros(self.n))
+        lambdas = np.zeros(self.n + 1)
 
-        for k in range(self.n - 1):
+        for k in range(self.n):
             p1 = self.panel_points[k]
             p2 = self.panel_points[k+1]
             midpoint = (p1.location + p2.location)/2
@@ -263,7 +258,7 @@ class Linear_panel(object):
                 for vortex in system.vortices:
                     v += vortex.get_chorin_velocity(midpoint)
             b.append(dot(n, self.velocity -v))
-            for m in range(self.n - 1):
+            for m in range(self.n):
                 z1 = self.panel_points[m]
                 z2 = self.panel_points[m+1]
                 rel = z2.location - z1.location
@@ -271,32 +266,27 @@ class Linear_panel(object):
                 tz = rel/lamda
                 tc = tz.conjugate()
                 z = (midpoint - z1.location)*tc
-                res1 = (-1j/(2*cmath.pi))*((((z/lamda)-1)*cmath.log(1-(lamda/z)))+1)
+                res1 = (-1j/(2*np.pi))*((((z/lamda)-1)*cmath.log(1-(lamda/z)))+1)
 
-                res2 = (1j/(2*cmath.pi))*((((z/lamda))*cmath.log(1-(lamda/z)))+1)
+                res2 = (1j/(2*np.pi))*((((z/lamda))*cmath.log(1-(lamda/z)))+1)
                 res1 = res1.conjugate()*tz
                 res2 = res2.conjugate()*tz
                 A[k][m] += dot(n,res1)
                 A[k][m+1] += dot(n,res2)
-        A.append(lambdas)
+        A = np.insert(A, self.n, lambdas, axis=0)
         b.append(self.net_circulation)
-        self.A = np.array(A)
-        self.b = np.array(b)
-        if self.loop:
-            #modify A
-            lst = list(map(list,self.A))
-            for row in lst:
-                row[0] = row[0] + row[-1]
-            self.A = np.array(lst)[:,:-1]
-            sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
-            for i in range(len(self.panel_points) - 1):
-                self.panel_points[i].gamma = sol[i]
-            self.panel_points[-1].gamma = self.panel_points[0].gamma
+        #modify A to make first gamma and the last gamma equal
+        A[:,0] += A[:,-1]
+        A = A[:,:-1]
 
-        else:
-            sol = np.linalg.lstsq(np.array(A), np.array(b))[0]
-            for i in range(len(self.panel_points)):
+
+
+        sol = np.linalg.lstsq(A, np.array(b))[0]
+        for i in range(self.n):
+            if abs(sol[i]) >= 0:
                 self.panel_points[i].gamma = sol[i]
+            else:
+                self.panel_points[i].gamma = 0
 
 class Source(object):
 
@@ -316,14 +306,14 @@ class Source(object):
         Returns a complex potential at a given location
         '''
 
-        return ((cmath.log(location - self.location))*(self.strength)/(2*cmath.pi))
+        return ((cmath.log(location - self.location))*(self.strength)/(2*np.pi))
 
     def potential_grad(self, location):
         '''
         Returns a complex gradient of the potential function at a given location
         '''
 
-        return (self.strength/(2*cmath.pi))*(1/(location - self.location))
+        return (self.strength/(2*np.pi))*(1/(location - self.location))
 
     def get_velocity(self, location):
 
@@ -337,11 +327,11 @@ class Doublet(object):
 
     def potential(self, location):
 
-        return (-1*self.u)/(2*cmath.pi*(location- self.position))
+        return (-1*self.u)/(2*np.pi*(location- self.position))
 
     def potential_grad(self, location):
 
-        return (self.u)/((2*cmath.pi*((location - self.position)**2)))
+        return (self.u)/((2*np.pi*((location - self.position)**2)))
 
     def get_velocity(self, location):
 
@@ -390,7 +380,9 @@ class Setup(object):
     def __init__(self, assignment_panel=False,sources=None, vortices=None, freestreams=None, tracers=None, cont_panels=None, doublets=None, linear_panels=None):
         '''
         each kwarg should be a list of respective object,
-        tracers is a list containing initial coordinates of each tracer
+        currently, support is only for closed loop panels and
+        vortex-freestream systems. Sources and doublets are yet to be added.
+
         '''
         self.sources = sources
         self.vortices = vortices
@@ -848,6 +840,9 @@ class Setup(object):
                     vortex.location = reference + (2*rcritical - r)*(relative_vector/r)
 
     def annihilate(self):
+        '''
+        of the order O(n^2), need to make it less than that
+        '''
         if self.vortices is not None:
             for i in range(len(self.vortices)):
                 for j in (np.arange(len(self.vortices) - 1) + i)%len(self.vortices):
