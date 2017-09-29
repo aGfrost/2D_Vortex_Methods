@@ -28,5 +28,10 @@ ax = fig.add_axes([0.11,0.11,0.75,0.75])
 for vortex in sys.vortices:
     ax.plot([i.real for i in vortex.path], [i.imag for i in vortex.path])
 ```
+![alt text](https://github.com/deeptavker/2D_Vortex_Methods/blob/master/Images/vortices_3.png)
 
- 
+#### Flow past circular cylinder with a reynolds number of 1000. 
+
+The code can be found [here](https://github.com/deeptavker/2D_Vortex_Methods/blob/master/scripts/flow_past_circular_cylinder.py).
+
+![alt text](https://github.com/deeptavker/2D_Vortex_Methods/blob/master/Images/cylinder_45.png)
