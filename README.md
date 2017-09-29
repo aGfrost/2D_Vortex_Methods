@@ -50,6 +50,8 @@ Reference : Robert Krasny, Computation of vortex sheet roll-up in the Trefftz pl
 ----
 #### Flow past NACA 2412 Airfoil M=2.0% P=40.0% T=12.0%
 
+Coordinate Generator : http://airfoiltools.com/airfoil/naca4digit
+
 ```python
 # a is taken from a coordinte generator
 pts = [complex(*i) for i in zip(a[::2], a[1::2])]
