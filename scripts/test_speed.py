@@ -1,6 +1,5 @@
 import cmath
 import numpy as np
-import matplotlib.pyplot as plt
 
 #utility functions
 
@@ -851,3 +850,78 @@ class Setup(object):
                 if vortex.gamma == 0:
                     self.all.remove(vortex)
                     self.vortices.remove(vortex)
+
+if __name__ == '__main__':
+    import json
+    pts = np.linspace(0,2*np.pi, 51)
+    pts = [complex(1*np.cos(i), 1*np.sin(i)) for i in pts]
+
+    panel = Linear_panel(pts, net_circulation=0)
+    sys = Setup(linear_panels=[panel], freestreams=[Freestream(1)])
+    gamma_max = 0.01
+    rho = 1000.0
+    Re = 1000.0
+    u = 1.0
+    d = 2.0
+    nu = u*d/Re
+    lamda = abs(
+        sys.linear_panels[0].panel_points[0].location -\
+        sys.linear_panels[0].panel_points[1].location
+    )
+    delta = lamda/np.pi
+
+
+    def color(gamma):
+        if gamma > 0:
+            return 'b'
+        else:
+            return 'r'
+
+    def simulate(time):
+        time_value = 0
+        for iter in range(int(time/0.1)):
+
+            time_value += 0.1
+            time_stamp = str(time_value)
+            print(time_stamp)
+            sys.linear_panels[0].solve_chorin(sys)
+            sys.update_RK2_chorin(0.1)
+            sys.reflect(complex(0,0), 1)
+            points = sys.linear_panels[0].panel_points
+            for i in range(len(points) - 1):
+                relative_vector = points[i+1].location - points[i].location
+                unit_vector = relative_vector/abs(relative_vector)
+                unit_normal = 1j*unit_vector
+                panel_circulation = (points[i].gamma + points[i+1].gamma)*\
+                lamda/2
+                no_of_vortices = int(abs(panel_circulation/gamma_max))
+
+                sign = panel_circulation/abs(panel_circulation)
+                if no_of_vortices > 0:
+                    new_vortices = []
+                    new_location = points[i].location + relative_vector/2 +\
+                     delta*unit_normal
+                    for k in range(no_of_vortices):
+                        new_vortices.append(Vortex(
+                                new_location,
+                                gamma_max*sign,
+                                delta=delta))
+                    sys.add_vortices(new_vortices)
+            sys.diffuse(nu,0.1)
+
+            sys.reflect(complex(0,0),1)
+            panel = sys.linear_panels[0]
+
+
+
+
+            print(len(sys.vortices))
+            x = [i.location.real for i in sys.vortices]
+            y = [i.location.imag for i in sys.vortices]
+            c = [color(i.circulation) for i in sys.vortices]
+            data = {'x':x, 'y':y, 'c':c}
+            with open(time_stamp + '.json', 'w') as outfile:
+                json.dump(data,outfile)
+            #save x, y, c as json data.
+
+    simulate(15)
